@@ -1,0 +1,23 @@
+# SNODAS data — downloaded from NOAA or derived; not committed
+snodas_data/
+
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# macOS
+.DS_Store
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editor
+.idea/
+*.iml

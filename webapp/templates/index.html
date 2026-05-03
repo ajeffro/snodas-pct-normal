@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNODAS SWE % of Average — {{ region_name }}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        
+        #map { width: 100%; height: 100vh; }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 60px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.95);
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            max-width: 360px;
+        }
+        .info-panel h2 {
+            font-size: 15px;
+            margin-bottom: 4px;
+            color: #333;
+        }
+        .info-panel .date {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .info-panel .subtitle {
+            font-size: 11px;
+            color: #999;
+            line-height: 1.4;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.95);
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .legend h4 {
+            font-size: 12px;
+            margin-bottom: 6px;
+            color: #333;
+        }
+        .legend-row {
+            display: flex;
+            align-items: center;
+            margin: 2px 0;
+            font-size: 11px;
+            color: #555;
+        }
+        .legend-swatch {
+            width: 20px;
+            height: 12px;
+            margin-right: 6px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+        }
+        
+        .click-popup .popup-title {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        .click-popup table {
+            font-size: 12px;
+            border-collapse: collapse;
+        }
+        .click-popup td {
+            padding: 2px 8px 2px 0;
+        }
+        .click-popup .pct-value {
+            font-weight: 700;
+            font-size: 16px;
+        }
+        .click-popup .pct-low { color: #CC0000; }
+        .click-popup .pct-mid { color: #CC9900; }
+        .click-popup .pct-normal { color: #00AA00; }
+        .click-popup .pct-high { color: #0066CC; }
+
+        .opacity-control {
+            background: rgba(255,255,255,0.95);
+            padding: 8px 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="info-panel">
+        <h2>SWE Percent of Average — {{ region_name }}</h2>
+        <div class="date">Data: {{ data_date }} &nbsp;|&nbsp; Source: NOAA SNODAS</div>
+        <div class="subtitle">
+            Gridded Snow Water Equivalent as % of historical average (2004–present)
+            at 1 km resolution. Click any point for details.
+            <br>Not based on SNOTEL — covers ALL elevations.
+        </div>
+    </div>
+    
+    <div class="legend">
+        <h4>SWE % of Average</h4>
+        <div class="legend-row"><div class="legend-swatch" style="background:#8B0000"></div> 0%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#FF0000"></div> 25%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#FF6600"></div> 50%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#FFCC00"></div> 70%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#FFFF00"></div> 80%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#CCFF66"></div> 90%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#00CC00"></div> 100% (normal)</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#00CCCC"></div> 110%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#0066FF"></div> 120%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#0000CC"></div> 150%</div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#660099"></div> 200%+</div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], {{ default_zoom }});
+        
+        // Base layers
+        const topoLayer = L.tileLayer(
+            'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map: OpenTopoMap',
+            maxZoom: 17,
+        });
+        
+        const osmLayer = L.tileLayer(
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+        });
+        
+        const satelliteLayer = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Imagery: Esri',
+            maxZoom: 18,
+        });
+        
+        // Default to topo (best for seeing elevation contours alongside snowpack)
+        topoLayer.addTo(map);
+        
+        // SWE percent-of-average overlay
+        const sweOverlay = L.tileLayer('/tiles/latest/{z}/{x}/{y}.png', {
+            attribution: 'SWE Data: NOAA/NOHRSC SNODAS',
+            opacity: 0.7,
+            maxZoom: 12,
+            minZoom: 5,
+            tms: true,
+        }).addTo(map);
+        
+        // Layer control
+        const baseLayers = {
+            "Topographic": topoLayer,
+            "Street Map": osmLayer,
+            "Satellite": satelliteLayer,
+        };
+        const overlays = {
+            "SWE % of Average": sweOverlay,
+        };
+        L.control.layers(baseLayers, overlays).addTo(map);
+        
+        // Opacity slider
+        const opacityControl = L.control({position: 'topright'});
+        opacityControl.onAdd = function() {
+            const div = L.DomUtil.create('div', 'opacity-control');
+            div.innerHTML = `
+                <label style="font-size:12px;color:#333;">
+                    Overlay opacity: 
+                    <input type="range" id="opacity-slider" min="0" max="100" value="70" 
+                           style="width:100px;vertical-align:middle;">
+                    <span id="opacity-value">70%</span>
+                </label>`;
+            L.DomEvent.disableClickPropagation(div);
+            return div;
+        };
+        opacityControl.addTo(map);
+        
+        document.getElementById('opacity-slider').addEventListener('input', function(e) {
+            const val = e.target.value;
+            sweOverlay.setOpacity(val / 100);
+            document.getElementById('opacity-value').textContent = val + '%';
+        });
+        
+        // Click handler for point queries
+        map.on('click', async function(e) {
+            const lat = e.latlng.lat.toFixed(5);
+            const lon = e.latlng.lng.toFixed(5);
+            
+            try {
+                const resp = await fetch(`/api/point?lat=${lat}&lon=${lon}`);
+                const data = await resp.json();
+                
+                if (data.error) {
+                    return;
+                }
+                
+                let pctClass = 'pct-low';
+                let pctDisplay = 'N/A';
+                if (data.pct_of_avg !== null && data.pct_of_avg !== undefined) {
+                    pctDisplay = data.pct_of_avg.toFixed(0) + '%';
+                    if (data.pct_of_avg >= 90) pctClass = 'pct-normal';
+                    else if (data.pct_of_avg >= 70) pctClass = 'pct-mid';
+                    if (data.pct_of_avg >= 120) pctClass = 'pct-high';
+                }
+                
+                const sweDisplay = data.swe_inches !== null ? 
+                    data.swe_inches.toFixed(1) + '"' : 'N/A';
+                const avgDisplay = data.avg_swe_inches !== null ? 
+                    data.avg_swe_inches.toFixed(1) + '"' : 'N/A';
+                
+                const popupContent = `
+                    <div class="click-popup">
+                        <div class="popup-title">SWE at ${lat}°N, ${Math.abs(lon)}°W</div>
+                        <table>
+                            <tr>
+                                <td>% of Average:</td>
+                                <td class="pct-value ${pctClass}">${pctDisplay}</td>
+                            </tr>
+                            <tr>
+                                <td>Current SWE:</td>
+                                <td>${sweDisplay}</td>
+                            </tr>
+                            <tr>
+                                <td>Average SWE (this date):</td>
+                                <td>${avgDisplay}</td>
+                            </tr>
+                        </table>
+                    </div>`;
+                
+                L.popup()
+                    .setLatLng(e.latlng)
+                    .setContent(popupContent)
+                    .openOn(map);
+                
+            } catch (err) {
+                console.error('Point query failed:', err);
+            }
+        });
+    </script>
+</body>
+</html>
