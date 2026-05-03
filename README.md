@@ -67,8 +67,8 @@ python scripts/compute_daily_pct.py
 
 ### Requirements
 - Python 3.9+
-- Disk space: ~40-50 GB for PNW regional clip; ~500 GB for full CONUS archive
-- A server or VM with cron capability for daily updates
+- Disk space: ~20-30 GB for PNW regional clip; up to 500 GB for full CONUS archive
+- (optional, for automatic daily updates) A server or VM with cron capability
 
 ### Install
 ```bash
